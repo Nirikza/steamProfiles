@@ -1,0 +1,15 @@
+# env
+.env
+
+# database
+data/app.db
+
+# next.js
+web/node_modules
+web/.next
+
+# logs
+*.log
+
+# macOS
+.DS_Store
