@@ -1,0 +1,36 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Game {
+  id               Int           @id @default(autoincrement())
+  appId            Int           @unique
+  name             String
+  releaseDate      DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  achievements     Achievement[]
+}
+
+model Achievement {
+  id              Int      @id @default(autoincrement())
+  gameId          Int
+  apiName         String
+  displayName     String
+  description     String?
+  icon            String?
+  hidden          Boolean  @default(false)
+  classification  String   @default("unknown")
+  achieved        Boolean  @default(false)
+  unlockTime      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  game            Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@unique([gameId, apiName])
+}
