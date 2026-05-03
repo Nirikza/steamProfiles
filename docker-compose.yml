@@ -1,0 +1,18 @@
+services:
+  app:
+    container_name: steam-platinum-tracker-app
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: "file:/data/app.db"
+    volumes:
+      - ./web:/app
+      - ./data:/data
+    command: npm run dev
+    restart: unless-stopped
