@@ -1,5 +1,11 @@
 # Steam Profiles / Steam Platinum Tracker
 
+![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=nextdotjs)
+![Docker](https://img.shields.io/badge/Docker-ready-blue?logo=docker)
+![Prisma](https://img.shields.io/badge/Prisma-SQLite-2D3748?logo=prisma)
+![Ollama](https://img.shields.io/badge/Ollama-local_AI-green)
+![Status](https://img.shields.io/badge/status-learning_project-orange)
+
 [English](#english) | [Português](#português)
 
 ---
@@ -8,9 +14,9 @@
 
 ## Summary
 
-Steam Profiles is a local web application that tracks Steam game completion in a more “PlayStation-like” way.
+Steam Profiles is a local Steam completion tracker.
 
-The goal is to calculate a custom platinum status for Steam games by separating base game achievements from DLC/extra achievements.
+It syncs your Steam library and achievements, shows completion progress, rare achievements, hidden achievements, and generates AI-powered guides using Ollama.
 
 ---
 
@@ -21,50 +27,94 @@ git clone https://github.com/YOUR_USERNAME/steamProfiles.git
 cd steamProfiles
 ```
 
-Create `.env`:
-
-```env
-STEAM_API_KEY=
-STEAM_ID=
-DATABASE_URL=file:/data/app.db
-```
-
-Run:
+Create your environment file:
 
 ```bash
-docker compose up --build
+cp web/.env.example web/.env
 ```
 
-App runs at:
+Edit `web/.env`:
+
+```env
+STEAM_API_KEY=your_steam_api_key_here
+STEAM_ID=your_steam_id_here
+
+DATABASE_URL=file:/data/app.db
+
+OLLAMA_URL=http://ollama:11434
+OLLAMA_MODEL=llama3.2
+```
+
+---
+
+## Start the app
+
+```bash
+make up
+```
+
+Download AI model:
+
+```bash
+make ollama-pull
+```
+
+Setup database:
+
+```bash
+make db
+make generate
+```
+
+App:
 
 ```
 http://localhost:3000
 ```
 
----
-
-## Database Setup
+Prisma Studio:
 
 ```bash
-docker compose exec app sh
-npx prisma migrate dev
-npx prisma generate
+make studio
+```
+
+```
+http://localhost:5555
+```
+
+---
+
+## Commands
+
+```bash
+make up
+make down
+make restart
+make logs
+make db
+make generate
+make studio
+make ollama-pull
+make setup
 ```
 
 ---
 
 ## API
 
-Sync Steam games:
-
 ```bash
 curl -X POST http://localhost:3000/api/steam/sync
 ```
 
+```bash
+curl -X POST http://localhost:3000/api/steam/sync-achievements/APP_ID
+```
 
-Disclaimer
+---
 
-This project was developed as a learning experience. I am still a beginner, especially regarding security practices. Therefore, I do not take responsibility for any issues, vulnerabilities, or damages that may occur from using this software.
+## Disclaimer
+
+This project was developed as a learning experience. I am still a beginner and do not take responsibility for any issues or vulnerabilities.
 
 ---
 
@@ -72,7 +122,9 @@ This project was developed as a learning experience. I am still a beginner, espe
 
 ## Resumo
 
-Steam Profiles é uma app local para acompanhar o progresso dos jogos Steam de forma semelhante à PlayStation.
+Steam Profiles é uma aplicação local para acompanhar o progresso dos jogos Steam.
+
+Inclui sincronização de conquistas, raridade, conquistas ocultas e geração de guias com IA local (Ollama).
 
 ---
 
@@ -85,44 +137,51 @@ cd steamProfiles
 
 Criar `.env`:
 
-```env
-STEAM_API_KEY=
-STEAM_ID=
-DATABASE_URL=file:/data/app.db
+```bash
+cp web/.env.example web/.env
 ```
 
-Executar:
+Editar:
+
+```env
+STEAM_API_KEY=your_steam_api_key_here
+STEAM_ID=your_steam_id_here
+
+DATABASE_URL=file:/data/app.db
+
+OLLAMA_URL=http://ollama:11434
+OLLAMA_MODEL=llama3.2
+```
+
+---
+
+## Iniciar
 
 ```bash
-docker compose up --build
+make up
+make ollama-pull
+make db
+make generate
 ```
 
-A app fica disponível em:
+App:
 
 ```
 http://localhost:3000
 ```
 
----
-
-## Base de Dados
+Prisma:
 
 ```bash
-docker compose exec app sh
-npx prisma migrate dev
-npx prisma generate
+make studio
+```
+
+```
+http://localhost:5555
 ```
 
 ---
 
-## API
+## Aviso
 
-Sincronizar jogos:
-
-```bash
-curl -X POST http://localhost:3000/api/steam/sync
-```
-
-Aviso
-
-Este projeto foi desenvolvido como parte do meu processo de aprendizagem. Ainda sou iniciante, especialmente em termos de segurança. Assim, não me responsabilizo por quaisquer problemas, vulnerabilidades ou danos que possam surgir ao utilizar este software.
+Este projeto foi desenvolvido como aprendizagem. Não me responsabilizo por problemas ou vulnerabilidades.

@@ -2,36 +2,22 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-
-type Achievement = {
-  id: number;
-  apiName: string;
-  displayName: string;
-  description: string | null;
-  achieved: boolean;
-  hidden: boolean;
-  unlockTime: string | null;
-  icon: string | null;
-  globalPercent: number | null;
-};
-
-type GameAchievements = {
-  appId: number;
-  name: string;
-  headerImage: string | null;
-  iconImage: string | null;
-  achievements: Achievement[];
-};
-
-type Filter = "all" | "unlocked" | "locked" | "hidden" | "rare" | "common";
-
-type Sort =
-  | "default"
-  | "unlocked-first"
-  | "locked-first"
-  | "name"
-  | "rarity-asc"
-  | "rarity-desc";
+import AchievementCard from "./game-details/AchievementCard";
+import AchievementFilters from "./game-details/AchievementFilters";
+import AIGuideModal from "./game-details/AIGuideModal";
+import GameStatsSidebar from "./game-details/GameStatsSidebar";
+import {
+  buildAchievementGuideText,
+  getAchievementSearchText,
+} from "./game-details/helpers";
+import type {
+  Achievement,
+  AISource,
+  Filter,
+  GameAchievements,
+  GameStats,
+  Sort,
+} from "./game-details/types";
 
 type GameDetailsProps = {
   appId: string;
@@ -45,6 +31,13 @@ export default function GameDetails({ appId }: GameDetailsProps) {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [revealedHidden, setRevealedHidden] = useState<number[]>([]);
+
+  const [aiGuideOpen, setAiGuideOpen] = useState(false);
+  const [aiGuideLoading, setAiGuideLoading] = useState(false);
+  const [aiGuideTitle, setAiGuideTitle] = useState("");
+  const [aiGuideContent, setAiGuideContent] = useState("");
+  const [aiGuideError, setAiGuideError] = useState<string | null>(null);
+  const [aiSources, setAiSources] = useState<AISource[]>([]);
 
   async function loadGame() {
     setLoading(true);
@@ -78,11 +71,203 @@ export default function GameDetails({ appId }: GameDetailsProps) {
     );
   }
 
+  function openAchievementGuide(achievement: Achievement) {
+    const query = encodeURIComponent(getAchievementSearchText(game, achievement));
+
+    window.open(
+      `https://www.youtube.com/results?search_query=${query}`,
+      "_blank",
+      "noopener,noreferrer"
+    );
+  }
+
+  function openWrittenGuideSearch(achievement: Achievement) {
+    const query = encodeURIComponent(getAchievementSearchText(game, achievement));
+
+    window.open(
+      `https://www.google.com/search?q=${query}`,
+      "_blank",
+      "noopener,noreferrer"
+    );
+  }
+
+  function askChatGpt(achievement: Achievement) {
+    if (!game) return;
+
+    const prompt = encodeURIComponent(
+      `I am playing "${game.name}" on Steam.
+
+Achievement:
+"${achievement.displayName}"
+
+Description:
+${achievement.description ||
+      (achievement.hidden
+        ? "This is a hidden achievement."
+        : "No description available.")
+      }
+
+Please give me a clear, step-by-step guide to unlock this achievement. Include missable warnings, required mission/level, difficulty requirements, multiplayer/co-op requirements, DLC warnings, and any useful tips.`
+    );
+
+    window.open(
+      `https://chatgpt.com/?q=${prompt}`,
+      "_blank",
+      "noopener,noreferrer"
+    );
+  }
+
+  async function generateAIGuide(achievement: Achievement) {
+    setAiGuideOpen(true);
+    setAiGuideLoading(true);
+    setAiGuideError(null);
+    setAiGuideTitle(achievement.displayName);
+    setAiGuideContent("");
+    setAiSources([]);
+
+    try {
+      const res = await fetch("/api/ai/achievement-guide", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          achievementId: achievement.id,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Erro ao gerar guia.");
+      }
+
+      setAiGuideContent(data.guide || "Sem resposta da IA.");
+      setAiSources(data.sources ?? []);
+    } catch (error) {
+      setAiGuideError(
+        error instanceof Error ? error.message : "Erro desconhecido."
+      );
+    } finally {
+      setAiGuideLoading(false);
+    }
+  }
+
+  function downloadAchievementGuide(achievement: Achievement) {
+    const content = buildAchievementGuideText(game, achievement);
+
+    const blob = new Blob([content], {
+      type: "text/plain;charset=utf-8",
+    });
+
+    const url = URL.createObjectURL(blob);
+
+    const safeGameName = game?.name.replace(/[^a-z0-9]+/gi, "-") ?? "game";
+    const safeAchievementName = achievement.displayName.replace(
+      /[^a-z0-9]+/gi,
+      "-"
+    );
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${safeGameName}-${safeAchievementName}-guide.txt`;
+    link.click();
+
+    URL.revokeObjectURL(url);
+  }
+
+  function downloadAIGuide() {
+    if (!game || !aiGuideContent) return;
+
+    const sourcesText =
+      aiSources.length > 0
+        ? `
+
+Sources:
+${aiSources
+          .map((source, index) => `${index + 1}. ${source.title}\n${source.url}`)
+          .join("\n\n")}
+`
+        : "";
+
+    const content = `Steam Platinum Tracker - AI Guide
+
+Game:
+${game.name}
+
+Achievement:
+${aiGuideTitle}
+
+Guide:
+${aiGuideContent}
+${sourcesText}
+`;
+
+    const blob = new Blob([content], {
+      type: "text/plain;charset=utf-8",
+    });
+
+    const url = URL.createObjectURL(blob);
+
+    const safeGameName = game.name.replace(/[^a-z0-9]+/gi, "-");
+    const safeAchievementName = aiGuideTitle.replace(/[^a-z0-9]+/gi, "-");
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${safeGameName}-${safeAchievementName}-ai-guide.txt`;
+    link.click();
+
+    URL.revokeObjectURL(url);
+  }
+
+  async function downloadAIGuidePdf() {
+    if (!game || !aiGuideContent) return;
+
+    const achievement = game.achievements.find(
+      (item) => item.displayName === aiGuideTitle
+    );
+
+    const res = await fetch("/api/ai/achievement-guide/pdf", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        gameName: game.name,
+        achievementTitle: aiGuideTitle,
+        achievementDescription: achievement?.description ?? null,
+        achievementIcon: achievement?.icon ?? null,
+        headerImage: game.headerImage,
+        guide: aiGuideContent,
+        sources: aiSources,
+      }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      alert(data?.error || "Erro ao gerar PDF.");
+      return;
+    }
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${game.name}-${aiGuideTitle}-guide.pdf`.replace(
+      /[^a-z0-9.-]+/gi,
+      "-"
+    );
+    link.click();
+
+    URL.revokeObjectURL(url);
+  }
+
   useEffect(() => {
     loadGame();
   }, [appId]);
 
-  const stats = useMemo(() => {
+  const stats: GameStats = useMemo(() => {
     if (!game) {
       return {
         total: 0,
@@ -132,9 +317,8 @@ export default function GameDetails({ appId }: GameDetailsProps) {
 
     return game.achievements
       .filter((achievement) => {
-        const text = `${achievement.displayName} ${
-          achievement.description ?? ""
-        }`.toLowerCase();
+        const text = `${achievement.displayName} ${achievement.description ?? ""
+          }`.toLowerCase();
 
         const matchesSearch = text.includes(search.toLowerCase());
 
@@ -197,7 +381,7 @@ export default function GameDetails({ appId }: GameDetailsProps) {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-black text-white p-6">
+      <main className="min-h-screen bg-black p-6 text-white">
         <p className="text-zinc-400">Loading game...</p>
       </main>
     );
@@ -205,18 +389,18 @@ export default function GameDetails({ appId }: GameDetailsProps) {
 
   if (!game) {
     return (
-      <main className="min-h-screen bg-black text-white p-6">
+      <main className="min-h-screen bg-black p-6 text-white">
         <Link href="/" className="text-blue-400 hover:underline">
           ← Back to dashboard
         </Link>
 
-        <p className="text-red-400 mt-6">Game not found.</p>
+        <p className="mt-6 text-red-400">Game not found.</p>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-black text-white p-6">
+    <main className="min-h-screen bg-black p-6 text-white">
       <style jsx global>{`
         @keyframes rareShine {
           0% {
@@ -275,6 +459,19 @@ export default function GameDetails({ appId }: GameDetailsProps) {
         }
       `}</style>
 
+      {aiGuideOpen && (
+        <AIGuideModal
+          title={aiGuideTitle}
+          content={aiGuideContent}
+          loading={aiGuideLoading}
+          error={aiGuideError}
+          sources={aiSources}
+          onClose={() => setAiGuideOpen(false)}
+          onDownload={downloadAIGuide}
+          onDownloadPdf={downloadAIGuidePdf}
+        />
+      )}
+
       <div className="mb-6 flex items-center justify-between gap-4">
         <Link href="/" className="text-blue-400 hover:underline">
           ← Back to dashboard
@@ -290,280 +487,32 @@ export default function GameDetails({ appId }: GameDetailsProps) {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
-        <aside className="xl:sticky xl:top-6 xl:self-start">
-          <section className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950">
-            {game.headerImage && (
-              <img
-                src={game.headerImage}
-                alt={game.name}
-                className="aspect-video w-full object-cover"
-              />
-            )}
-
-            <div className="p-6">
-              <div className="flex items-center gap-4">
-                {game.iconImage && (
-                  <img
-                    src={game.iconImage}
-                    alt={`${game.name} icon`}
-                    className="h-12 w-12 rounded"
-                  />
-                )}
-
-                <div>
-                  <h1 className="text-3xl font-bold">{game.name}</h1>
-
-                  <p className="text-zinc-400 mt-1">
-                    {stats.unlocked} / {stats.total} achievements
-                  </p>
-
-                  {stats.hidden > 0 && (
-                    <p className="text-purple-400 text-sm mt-1">
-                      {stats.hidden} hidden achievements
-                    </p>
-                  )}
-
-                  {stats.rare > 0 && (
-                    <p className="text-orange-400 text-sm mt-1">
-                      {stats.rare} rare achievements • {stats.rareUnlocked} unlocked
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <p className="text-zinc-300 mt-6">
-                Progress: {stats.percentage}%
-              </p>
-
-              <div className="w-full bg-zinc-800 rounded-full h-3 mt-3">
-                <div
-                  className="bg-blue-500 h-3 rounded-full"
-                  style={{ width: `${stats.percentage}%` }}
-                />
-              </div>
-
-              <div className="mt-4 grid gap-3">
-                <div className="rounded-xl bg-zinc-900 p-4">
-                  <p className="text-sm text-zinc-400">Unlocked</p>
-                  <p className="text-2xl font-bold text-green-400">
-                    {stats.unlocked}
-                  </p>
-                </div>
-
-                <div className="rounded-xl bg-zinc-900 p-4">
-                  <p className="text-sm text-zinc-400">Locked</p>
-                  <p className="text-2xl font-bold text-zinc-300">
-                    {stats.locked}
-                  </p>
-                </div>
-
-                <div className="rounded-xl bg-zinc-900 p-4">
-                  <p className="text-sm text-zinc-400">Hidden</p>
-                  <p className="text-2xl font-bold text-purple-400">
-                    {stats.hidden}
-                  </p>
-                </div>
-
-                <div className="rounded-xl border border-orange-900/40 bg-orange-950/30 p-4">
-                  <p className="text-sm text-orange-300">Rare unlocked</p>
-                  <p className="text-2xl font-bold text-orange-400">
-                    {stats.rareUnlocked} / {stats.rare}
-                  </p>
-                </div>
-              </div>
-
-              {stats.isPlatinum && (
-                <p className="text-yellow-400 font-bold mt-4 text-xl">
-                  🏆 Platinum
-                </p>
-              )}
-            </div>
-          </section>
-        </aside>
+        <GameStatsSidebar game={game} stats={stats} />
 
         <section>
-          <div className="mb-6 grid gap-3 md:grid-cols-3">
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search achievements..."
-              className="rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 outline-none"
-            />
-
-            <select
-              value={filter}
-              onChange={(event) => setFilter(event.target.value as Filter)}
-              className="rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 outline-none"
-            >
-              <option value="all">All achievements</option>
-              <option value="unlocked">Unlocked only</option>
-              <option value="locked">Locked only</option>
-              <option value="hidden">Hidden only</option>
-              <option value="rare">Rare only (&lt;10%)</option>
-              <option value="common">Common only (≥10%)</option>
-            </select>
-
-            <select
-              value={sort}
-              onChange={(event) => setSort(event.target.value as Sort)}
-              className="rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 outline-none"
-            >
-              <option value="default">Default order</option>
-              <option value="unlocked-first">Unlocked first</option>
-              <option value="locked-first">Locked first</option>
-              <option value="name">Name</option>
-              <option value="rarity-asc">Rarest first</option>
-              <option value="rarity-desc">Most common first</option>
-            </select>
-          </div>
+          <AchievementFilters
+            search={search}
+            filter={filter}
+            sort={sort}
+            onSearchChange={setSearch}
+            onFilterChange={setFilter}
+            onSortChange={setSort}
+          />
 
           <div className="grid gap-3">
-            {filteredAchievements.map((achievement) => {
-              const isRare =
-                typeof achievement.globalPercent === "number" &&
-                achievement.globalPercent < 10;
-
-              const isRareUnlocked = isRare && achievement.achieved;
-
-              const isHiddenAndNotRevealed =
-                achievement.hidden &&
-                !achievement.achieved &&
-                !revealedHidden.includes(achievement.id);
-
-              const isHiddenAndRevealed =
-                achievement.hidden &&
-                !achievement.achieved &&
-                revealedHidden.includes(achievement.id);
-
-              return (
-                <div
-                  key={achievement.id}
-                  onClick={() => {
-                    if (achievement.hidden && !achievement.achieved) {
-                      toggleHiddenReveal(achievement.id);
-                    }
-                  }}
-                  className={`rounded-xl border p-4 transition ${
-                    achievement.hidden && !achievement.achieved
-                      ? "cursor-pointer"
-                      : ""
-                  } ${
-                    isRareUnlocked
-                      ? "rare-unlocked-card border-yellow-500/70 bg-yellow-950/20"
-                      : achievement.achieved
-                      ? "border-green-900/60 bg-green-950/20"
-                      : "border-zinc-800 bg-zinc-950 opacity-80"
-                  }`}
-                >
-                  <div className="relative z-10 flex items-start justify-between gap-4">
-                    <div className="flex gap-3">
-                      {achievement.icon && !isHiddenAndNotRevealed ? (
-                        <img
-                          src={achievement.icon}
-                          alt={achievement.displayName}
-                          className={`h-10 w-10 rounded ${
-                            isRareUnlocked ? "ring-2 ring-yellow-400/70" : ""
-                          }`}
-                        />
-                      ) : (
-                        <div className="flex h-10 w-10 items-center justify-center rounded bg-zinc-800">
-                          {isHiddenAndNotRevealed
-                            ? "❓"
-                            : achievement.achieved
-                            ? "✅"
-                            : "🔒"}
-                        </div>
-                      )}
-
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h2 className="font-semibold">
-                            {isHiddenAndNotRevealed
-                              ? "Conquista oculta"
-                              : achievement.displayName}
-                          </h2>
-
-                          {achievement.achieved ? (
-                            <span className="rounded-full bg-green-500/20 px-2 py-1 text-xs text-green-300">
-                              Unlocked
-                            </span>
-                          ) : (
-                            <span className="rounded-full bg-zinc-700 px-2 py-1 text-xs text-zinc-300">
-                              Locked
-                            </span>
-                          )}
-
-                          {achievement.hidden && (
-                            <span className="rounded-full bg-purple-500/20 px-2 py-1 text-xs text-purple-300">
-                              Hidden
-                            </span>
-                          )}
-
-                          {isRare && (
-                            <span
-                              className={`rounded-full bg-orange-500/20 px-2 py-1 text-xs font-bold text-orange-300 ${
-                                isRareUnlocked ? "rare-badge-spark" : ""
-                              }`}
-                            >
-                              ✨ Rare
-                            </span>
-                          )}
-
-                          {isRareUnlocked && (
-                            <span className="rounded-full bg-yellow-400/20 px-2 py-1 text-xs font-bold text-yellow-300">
-                              ⭐ Rare unlocked
-                            </span>
-                          )}
-                        </div>
-
-                        {isHiddenAndNotRevealed ? (
-                          <p className="text-zinc-500 mt-1">
-                            Clica para revelar os detalhes desta conquista.
-                          </p>
-                        ) : (
-                          <p className="text-zinc-400 mt-1">
-                            {achievement.description ||
-                              (achievement.hidden
-                                ? "Descrição oculta pela Steam API."
-                                : "Sem descrição disponível.")}
-                          </p>
-                        )}
-
-                        {isHiddenAndRevealed && (
-                          <p className="text-purple-400 text-sm mt-2">
-                            Hidden achievement • Clica para ocultar novamente
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="text-right">
-                      {typeof achievement.globalPercent === "number" && (
-                        <p
-                          className={`text-sm font-bold ${
-                            isRareUnlocked
-                              ? "text-yellow-300"
-                              : isRare
-                              ? "text-orange-300"
-                              : "text-zinc-400"
-                          }`}
-                        >
-                          {achievement.globalPercent.toFixed(1)}%
-                        </p>
-                      )}
-
-                      {achievement.achieved && achievement.unlockTime && (
-                        <span className="mt-2 block whitespace-nowrap text-sm text-zinc-400">
-                          {new Date(
-                            achievement.unlockTime
-                          ).toLocaleDateString()}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+            {filteredAchievements.map((achievement) => (
+              <AchievementCard
+                key={achievement.id}
+                achievement={achievement}
+                isRevealedHidden={revealedHidden.includes(achievement.id)}
+                onToggleHiddenReveal={toggleHiddenReveal}
+                onOpenYoutube={openAchievementGuide}
+                onOpenWrittenGuide={openWrittenGuideSearch}
+                onAskChatGpt={askChatGpt}
+                onGenerateAIGuide={generateAIGuide}
+                onDownloadTxt={downloadAchievementGuide}
+              />
+            ))}
 
             {filteredAchievements.length === 0 && (
               <p className="text-zinc-500">No achievements found.</p>

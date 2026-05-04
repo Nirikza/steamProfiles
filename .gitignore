@@ -1,15 +1,56 @@
-# env
+# =========================
+# ENV
+# =========================
 .env
+.env.*
+!.env.example
 
-# database
+# =========================
+# DATABASE
+# =========================
 data/app.db
+data/*.db
+data/*.db-journal
 
-# next.js
+# =========================
+# NODE / NEXT
+# =========================
+node_modules
 web/node_modules
 web/.next
+.next
 
-# logs
+# build / output
+dist
+build
+
+# =========================
+# LOGS
+# =========================
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
-# macOS
+# =========================
+# OS
+# =========================
 .DS_Store
+Thumbs.db
+
+# =========================
+# DOCKER
+# =========================
+docker-compose.override.yml
+
+# =========================
+# PRISMA
+# =========================
+
+
+# =========================
+# TEMP / CACHE
+# =========================
+.tmp
+.cache
