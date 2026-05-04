@@ -42,12 +42,15 @@ export default function Dashboard() {
     async function syncLibrary() {
         setSyncingLibrary(true);
 
-        await fetch("/api/steam/sync", {
-            method: "POST",
-        });
+        try {
+            await fetch("/api/steam/sync", {
+                method: "POST",
+            });
 
-        await loadGames();
-        setSyncingLibrary(false);
+            await loadGames();
+        } finally {
+            setSyncingLibrary(false);
+        }
     }
 
     async function syncAllAchievements() {
@@ -79,7 +82,9 @@ export default function Dashboard() {
 
                 if (!matchesSearch) return false;
 
-                if (filter === "platinum") return game.isPlatinum;
+                if (filter === "platinum") {
+                    return game.totalAchievements > 0 && game.isPlatinum;
+                }
 
                 if (filter === "in-progress") {
                     return game.totalAchievements > 0 && !game.isPlatinum;
@@ -92,17 +97,38 @@ export default function Dashboard() {
                 return true;
             })
             .sort((a, b) => {
-                if (sort === "progress-desc") return b.percentage - a.percentage;
-                if (sort === "progress-asc") return a.percentage - b.percentage;
+                const aHasAchievements = a.totalAchievements > 0;
+                const bHasAchievements = b.totalAchievements > 0;
+
+                if (aHasAchievements && !bHasAchievements) return -1;
+                if (!aHasAchievements && bHasAchievements) return 1;
+
+                if (sort === "progress-desc") {
+                    return b.percentage - a.percentage;
+                }
+
+                if (sort === "progress-asc") {
+                    return a.percentage - b.percentage;
+                }
 
                 return a.name.localeCompare(b.name);
             });
     }, [games, search, filter, sort]);
 
-    const platinumCount = games.filter((game) => game.isPlatinum).length;
-
-    const syncedAchievementsCount = games.filter(
+    const gamesWithAchievements = games.filter(
         (game) => game.totalAchievements > 0
+    );
+
+    const platinumCount = gamesWithAchievements.filter(
+        (game) => game.isPlatinum
+    ).length;
+
+    const inProgressCount = gamesWithAchievements.filter(
+        (game) => !game.isPlatinum
+    ).length;
+
+    const noAchievementsCount = games.filter(
+        (game) => game.totalAchievements === 0
     ).length;
 
     return (
@@ -111,7 +137,7 @@ export default function Dashboard() {
                 <h1 className="text-3xl font-bold">Steam Platinum Tracker</h1>
 
                 <p className="text-zinc-400 mt-2">
-                    {games.length} games • {syncedAchievementsCount} with achievements •{" "}
+                    {games.length} games • {gamesWithAchievements.length} with achievements •{" "}
                     {platinumCount} platinum
                 </p>
             </div>
@@ -167,7 +193,7 @@ export default function Dashboard() {
                     className={`rounded-full px-4 py-2 ${filter === "platinum" ? "bg-yellow-400 text-black" : "bg-zinc-800"
                         }`}
                 >
-                    Platinum
+                    Platinum ({platinumCount})
                 </button>
 
                 <button
@@ -175,75 +201,102 @@ export default function Dashboard() {
                     className={`rounded-full px-4 py-2 ${filter === "in-progress" ? "bg-blue-500 text-white" : "bg-zinc-800"
                         }`}
                 >
-                    In Progress
+                    In Progress ({inProgressCount})
                 </button>
 
                 <button
                     onClick={() => setFilter("no-achievements")}
                     className={`rounded-full px-4 py-2 ${filter === "no-achievements"
-                        ? "bg-zinc-300 text-black"
-                        : "bg-zinc-800"
+                            ? "bg-zinc-300 text-black"
+                            : "bg-zinc-800"
                         }`}
                 >
-                    No achievements
+                    No achievements ({noAchievementsCount})
                 </button>
             </section>
 
             {loading ? (
                 <p className="text-zinc-400">Loading games...</p>
             ) : (
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
                     {filteredGames.map((game) => (
                         <Link
                             key={game.appId}
                             href={`/games/${game.appId}`}
-                            className="overflow-hidden border border-zinc-700 rounded-xl hover:border-blue-500 transition bg-zinc-950"
+                            className="group overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 transition hover:border-blue-500 hover:bg-zinc-900"
                         >
-                            {game.headerImage && (
-                                <img
-                                    src={game.headerImage}
-                                    alt={game.name}
-                                    className="w-full h-36 object-cover"
-                                />
-                            )}
+                            <div className="relative aspect-[16/7] overflow-hidden bg-zinc-900">
+                                {game.headerImage ? (
+                                    <img
+                                        src={game.headerImage}
+                                        alt={game.name}
+                                        className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                                    />
+                                ) : (
+                                    <div className="flex h-full w-full items-center justify-center text-zinc-600">
+                                        No image
+                                    </div>
+                                )}
 
-                            <div className="p-5">
-                                <div className="flex items-center gap-3">
+                                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
+
+                                <div className="absolute bottom-4 left-4 right-4 flex items-center gap-3">
                                     {game.iconImage && (
                                         <img
                                             src={game.iconImage}
                                             alt={`${game.name} icon`}
-                                            className="w-8 h-8 rounded"
+                                            className="h-10 w-10 rounded shadow-lg"
                                         />
                                     )}
 
-                                    <h2 className="text-xl font-semibold">{game.name}</h2>
+                                    <h2 className="line-clamp-2 text-xl font-bold drop-shadow">
+                                        {game.name}
+                                    </h2>
                                 </div>
+                            </div>
 
-                                <p className="text-zinc-300 mt-3">
-                                    {game.unlockedAchievements} / {game.totalAchievements}{" "}
-                                    achievements
-                                </p>
+                            <div className="p-5">
+                                {game.totalAchievements === 0 ? (
+                                    <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
+                                        <p className="font-semibold text-zinc-300">Sem conquistas</p>
+                                        <p className="mt-1 text-sm text-zinc-500">
+                                            Este jogo não tem achievements sincronizáveis.
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div className="flex items-center justify-between gap-3">
+                                            <p className="text-zinc-300">
+                                                {game.unlockedAchievements} / {game.totalAchievements}{" "}
+                                                achievements
+                                            </p>
 
-                                <p className="text-zinc-300">Progress: {game.percentage}%</p>
+                                            <p className="font-bold text-zinc-100">
+                                                {game.percentage}%
+                                            </p>
+                                        </div>
 
-                                <div className="w-full bg-zinc-800 rounded-full h-2 mt-3">
-                                    <div
-                                        className="bg-blue-500 h-2 rounded-full"
-                                        style={{ width: `${game.percentage}%` }}
-                                    />
-                                </div>
+                                        <div className="mt-3 h-2 w-full rounded-full bg-zinc-800">
+                                            <div
+                                                className="h-2 rounded-full bg-blue-500"
+                                                style={{ width: `${game.percentage}%` }}
+                                            />
+                                        </div>
 
-                                {game.isPlatinum && (
-                                    <p className="text-yellow-400 font-bold mt-3">🏆 Platinum</p>
-                                )}
-
-                                {game.totalAchievements === 0 && (
-                                    <p className="text-zinc-500 mt-3">No achievements synced</p>
+                                        {game.isPlatinum && (
+                                            <p className="mt-4 font-bold text-yellow-400">
+                                                🏆 Platinum
+                                            </p>
+                                        )}
+                                    </>
                                 )}
                             </div>
                         </Link>
                     ))}
+
+                    {filteredGames.length === 0 && (
+                        <p className="text-zinc-500">No games found.</p>
+                    )}
                 </div>
             )}
         </main>

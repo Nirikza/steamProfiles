@@ -1,20 +1,48 @@
 services:
   app:
     container_name: steam-platinum-tracker-app
+
     build:
       context: ./web
       dockerfile: Dockerfile
+
     ports:
       - "3000:3000"
       - "5555:5555"
+
     env_file:
-      - .env
+      - ./web/.env
+
     environment:
       NODE_ENV: development
-      DATABASE_URL: "file:/data/app.db"
+      DATABASE_URL: file:/data/app.db
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_MODEL: llama3.2
+      PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
+
     volumes:
       - ./web:/app
       - ./data:/data
-      - /app/node_modules
+
     command: npm run dev
+
+    depends_on:
+      - ollama
+
     restart: unless-stopped
+
+  ollama:
+    container_name: steam-platinum-tracker-ollama
+
+    image: ollama/ollama:latest
+
+    ports:
+      - "11434:11434"
+
+    volumes:
+      - ollama-data:/root/.ollama
+
+    restart: unless-stopped
+
+volumes:
+  ollama-data:
