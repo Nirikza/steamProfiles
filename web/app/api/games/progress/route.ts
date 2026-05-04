@@ -28,6 +28,8 @@ export async function GET() {
         return {
             appId: game.appId,
             name: game.name,
+            headerImage: game.headerImage,
+            iconImage: game.iconImage,
             totalAchievements,
             unlockedAchievements,
             percentage,

@@ -11,6 +11,8 @@ model Game {
   appId            Int           @unique
   name             String
   releaseDate      DateTime?
+  headerImage      String?
+  iconImage        String?
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
   achievements     Achievement[]

@@ -35,6 +35,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
         return Response.json({
             appId: game.appId,
             name: game.name,
+            headerImage: game.headerImage,
+            iconImage: game.iconImage,
             achievements: game.achievements,
         });
     } catch (error) {
