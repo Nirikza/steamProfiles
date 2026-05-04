@@ -29,6 +29,7 @@ model Achievement {
   classification  String   @default("unknown")
   achieved        Boolean  @default(false)
   unlockTime      DateTime?
+  globalPercent   Float?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

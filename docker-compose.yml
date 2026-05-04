@@ -6,6 +6,7 @@ services:
       dockerfile: Dockerfile
     ports:
       - "3000:3000"
+      - "5555:5555"
     env_file:
       - .env
     environment:
@@ -14,5 +15,6 @@ services:
     volumes:
       - ./web:/app
       - ./data:/data
+      - /app/node_modules
     command: npm run dev
     restart: unless-stopped
