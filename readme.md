@@ -48,6 +48,11 @@ OLLAMA_MODEL=llama3.2
 ---
 
 ## Start the app
+```bash
+
+make setup
+```
+Or if you want to do one-by-one
 
 ```bash
 make up
@@ -62,8 +67,7 @@ make ollama-pull
 Setup database:
 
 ```bash
-make db
-make generate
+make api-db-start
 ```
 
 App:
@@ -91,8 +95,7 @@ make up
 make down
 make restart
 make logs
-make db
-make generate
+make api-db-start
 make studio
 make ollama-pull
 make setup
@@ -158,10 +161,14 @@ OLLAMA_MODEL=llama3.2
 ## Iniciar
 
 ```bash
+
+make setup
+```
+Se quiseres fazer um a um
+```bash
 make up
 make ollama-pull
-make db
-make generate
+make api-db-start
 ```
 
 App:
