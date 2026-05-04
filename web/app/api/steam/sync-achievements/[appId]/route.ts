@@ -11,19 +11,11 @@ type RouteParams = {
 
 export async function POST(_request: Request, { params }: RouteParams) {
     const { appId } = await params;
+    const appIdNumber = Number(appId);
 
     if (!API_KEY || !STEAM_ID) {
         return Response.json(
             { error: "STEAM_API_KEY ou STEAM_ID em falta no .env" },
-            { status: 400 }
-        );
-    }
-
-    const appIdNumber = Number(appId);
-
-    if (!Number.isInteger(appIdNumber)) {
-        return Response.json(
-            { error: "appId inválido" },
             { status: 400 }
         );
     }
@@ -33,61 +25,88 @@ export async function POST(_request: Request, { params }: RouteParams) {
     });
 
     if (!game) {
-        return Response.json(
-            { error: "Jogo não encontrado na base de dados. Faz sync dos jogos primeiro." },
-            { status: 404 }
-        );
+        return Response.json({ error: "Jogo não encontrado" }, { status: 404 });
     }
 
-    const url =
+    const schemaUrl =
+        `https://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/` +
+        `?key=${API_KEY}&appid=${appIdNumber}&l=english`;
+
+    const playerUrl =
         `https://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v0001/` +
-        `?appid=${appIdNumber}` +
-        `&key=${API_KEY}` +
-        `&steamid=${STEAM_ID}` +
-        `&l=english`;
+        `?appid=${appIdNumber}&key=${API_KEY}&steamid=${STEAM_ID}&l=english`;
 
-    const res = await fetch(url);
+    const [schemaRes, playerRes] = await Promise.all([
+        fetch(schemaUrl),
+        fetch(playerUrl),
+    ]);
 
-    if (!res.ok) {
-        const text = await res.text();
-
+    if (!schemaRes.ok || !playerRes.ok) {
         return Response.json(
-            {
-                error: "Erro ao buscar achievements da Steam",
-                status: res.status,
-                body: text,
-            },
+            { error: "Erro ao buscar achievements da Steam" },
             { status: 500 }
         );
     }
 
-    const data = await res.json();
-    const achievements = data.playerstats?.achievements ?? [];
+    const schemaData = await schemaRes.json();
+    const playerData = await playerRes.json();
 
-    for (const achievement of achievements) {
+    const schemaAchievements =
+        schemaData.game?.availableGameStats?.achievements ?? [];
+
+    const playerAchievements = playerData.playerstats?.achievements ?? [];
+
+    const playerMap = new Map(
+        playerAchievements.map((achievement: any) => [
+            achievement.apiname,
+            achievement,
+        ])
+    );
+
+    for (const schemaAchievement of schemaAchievements) {
+        const playerAchievement = playerMap.get(schemaAchievement.name) as any;
+
+        const displayName =
+            schemaAchievement.displayName?.trim() ||
+            playerAchievement?.name?.trim() ||
+            schemaAchievement.name;
+
+        const description =
+            schemaAchievement.description?.trim() ||
+            playerAchievement?.description?.trim() ||
+            null;
+
+        const icon = schemaAchievement.icon || playerAchievement?.icon || null;
+
         await prisma.achievement.upsert({
             where: {
                 gameId_apiName: {
                     gameId: game.id,
-                    apiName: achievement.apiname,
+                    apiName: schemaAchievement.name,
                 },
             },
             update: {
-                achieved: achievement.achieved === 1,
+                displayName,
+                description,
+                icon,
+                hidden: schemaAchievement.hidden === 1,
+                achieved: playerAchievement?.achieved === 1,
                 unlockTime:
-                    achievement.unlocktime && achievement.unlocktime > 0
-                        ? new Date(achievement.unlocktime * 1000)
+                    playerAchievement?.unlocktime && playerAchievement.unlocktime > 0
+                        ? new Date(playerAchievement.unlocktime * 1000)
                         : null,
             },
             create: {
                 gameId: game.id,
-                apiName: achievement.apiname,
-                displayName: achievement.name ?? achievement.apiname,
-                description: achievement.description ?? null,
-                achieved: achievement.achieved === 1,
+                apiName: schemaAchievement.name,
+                displayName,
+                description,
+                icon,
+                hidden: schemaAchievement.hidden === 1,
+                achieved: playerAchievement?.achieved === 1,
                 unlockTime:
-                    achievement.unlocktime && achievement.unlocktime > 0
-                        ? new Date(achievement.unlocktime * 1000)
+                    playerAchievement?.unlocktime && playerAchievement.unlocktime > 0
+                        ? new Date(playerAchievement.unlocktime * 1000)
                         : null,
             },
         });
@@ -96,6 +115,6 @@ export async function POST(_request: Request, { params }: RouteParams) {
     return Response.json({
         appId: appIdNumber,
         game: game.name,
-        synced: achievements.length,
+        synced: schemaAchievements.length,
     });
 }

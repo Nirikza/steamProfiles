@@ -31,14 +31,24 @@ export async function POST() {
     const games = data.response?.games ?? [];
 
     for (const game of games) {
+        const headerImage = `https://cdn.cloudflare.steamstatic.com/steam/apps/${game.appid}/header.jpg`;
+
+        const iconImage = game.img_icon_url
+            ? `https://media.steampowered.com/steamcommunity/public/images/apps/${game.appid}/${game.img_icon_url}.jpg`
+            : null;
+
         await prisma.game.upsert({
             where: { appId: game.appid },
             update: {
                 name: game.name,
+                headerImage,
+                iconImage,
             },
             create: {
                 appId: game.appid,
                 name: game.name,
+                headerImage,
+                iconImage,
             },
         });
     }
